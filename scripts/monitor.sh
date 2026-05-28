@@ -69,11 +69,11 @@ get_cpu_usage() {
     sleep 1
     line2=$(grep -m1 '^cpu ' /proc/stat)
 
-    # cpu user nice system idle iowait irq softirq steal
-    local _ u1 n1 s1 i1 io1 ir1 sf1 st1
-    local u2 n2 s2 i2 io2 ir2 sf2 st2
-    read -r _ u1 n1 s1 i1 io1 ir1 sf1 st1 <<<"${line1}"
-    read -r _ u2 n2 s2 i2 io2 ir2 sf2 st2 <<<"${line2}"
+    # cpu user nice system idle iowait irq softirq steal [guest guest_nice]
+    local _ u1 n1 s1 i1 io1 ir1 sf1 st1 _rest1
+    local u2 n2 s2 i2 io2 ir2 sf2 st2 _rest2
+    read -r _ u1 n1 s1 i1 io1 ir1 sf1 st1 _rest1 <<<"${line1}"
+    read -r _ u2 n2 s2 i2 io2 ir2 sf2 st2 _rest2 <<<"${line2}"
 
     local idle1=$(( i1 + io1 ))
     local idle2=$(( i2 + io2 ))
