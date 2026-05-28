@@ -15,8 +15,8 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 작성자 |  |
-| 작성일 |  |
+| 작성자 | nansu0425 |
+| 작성일 | 2026-05-28 |
 | OS | Ubuntu 22.04 LTS (x86_64) |
 | 셸 | `bash` |
 | 저장소 경로 | `~/Codyssey/B1-1` |
@@ -80,7 +80,13 @@ tcp   LISTEN 0      128            0.0.0.0:20022      0.0.0.0:*    users:(("sshd
 ### 1.4 실제 실행 결과
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo sshd -T | grep -Ei '^port|^permitrootlogin'
+port 20022
+permitrootlogin no
+
+$ sudo ss -tulnp | grep -E 'sshd|:20022'
+tcp   LISTEN 0      128             0.0.0.0:20022      0.0.0.0:*    users:(("sshd",pid=7098,fd=3))
+tcp   LISTEN 0      128                [::]:20022         [::]:*    users:(("sshd",pid=7098,fd=4))
 ```
 
 ---
@@ -130,7 +136,18 @@ To                         Action      From
 ### 2.4 실제 실행 결과
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+20022/tcp                  ALLOW IN    Anywhere                   # SSH (custom)
+15034/tcp                  ALLOW IN    Anywhere                   # agent-app
+20022/tcp (v6)             ALLOW IN    Anywhere (v6)              # SSH (custom)
+15034/tcp (v6)             ALLOW IN    Anywhere (v6)              # agent-app
 ```
 
 ---
@@ -184,7 +201,18 @@ agent-core:x:1005:agent-admin,agent-dev
 ### 3.4 실제 실행 결과
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ id agent-admin
+uid=1001(agent-admin) gid=1003(agent-admin) groups=1003(agent-admin),1001(agent-common),1002(agent-core)
+
+$ id agent-dev
+uid=1002(agent-dev) gid=1004(agent-dev) groups=1004(agent-dev),1001(agent-common),1002(agent-core)
+
+$ id agent-test
+uid=1003(agent-test) gid=1005(agent-test) groups=1005(agent-test),1001(agent-common)
+
+$ getent group agent-common agent-core
+agent-common:x:1001:agent-admin,agent-dev,agent-test
+agent-core:x:1002:agent-admin,agent-dev
 ```
 
 ---
@@ -267,7 +295,56 @@ default:group:agent-core:rwx     # api_keys, /var/log/agent-app
 ### 4.4 실제 실행 결과
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo ls -ld /home/agent-admin/agent-app /home/agent-admin/agent-app/upload_files \
+              /home/agent-admin/agent-app/api_keys /home/agent-admin/agent-app/bin \
+              /var/log/agent-app
+drwxrwxr-x  5 agent-admin agent-admin  4096 May 28 02:47 /home/agent-admin/agent-app
+drwxrws---+ 2 agent-admin agent-core   4096 May 28 02:47 /home/agent-admin/agent-app/api_keys
+drwxr-s---  2 agent-admin agent-core   4096 May 28 02:47 /home/agent-admin/agent-app/bin
+drwxrws---+ 2 agent-admin agent-common 4096 May 28 02:47 /home/agent-admin/agent-app/upload_files
+drwxrws---+ 2 root        agent-core   4096 May 28 02:47 /var/log/agent-app
+
+$ sudo getfacl /home/agent-admin/agent-app/upload_files
+# file: home/agent-admin/agent-app/upload_files
+# owner: agent-admin
+# group: agent-common
+# flags: -s-
+user::rwx
+group::rwx
+other::---
+default:user::rwx
+default:group::rwx
+default:group:agent-common:rwx
+default:mask::rwx
+default:other::---
+
+$ sudo getfacl /home/agent-admin/agent-app/api_keys
+# file: home/agent-admin/agent-app/api_keys
+# owner: agent-admin
+# group: agent-core
+# flags: -s-
+user::rwx
+group::rwx
+other::---
+default:user::rwx
+default:group::rwx
+default:group:agent-core:rwx
+default:mask::rwx
+default:other::---
+
+$ sudo getfacl /var/log/agent-app
+# file: var/log/agent-app
+# owner: root
+# group: agent-core
+# flags: -s-
+user::rwx
+group::rwx
+other::---
+default:user::rwx
+default:group::rwx
+default:group:agent-core:rwx
+default:mask::rwx
+default:other::---
 ```
 
 ---
@@ -279,7 +356,9 @@ default:group:agent-core:rwx     # api_keys, /var/log/agent-app
 
 ### 5.1 수행 내용
 
-`/etc/profile.d/agent-app.sh` 에 `AGENT_*` 환경 변수를 시스템 전역으로 등록하고, `agent_api_key_test` 1줄을 담은 키 파일을 `$AGENT_KEY_PATH` 에 생성했다.
+`/etc/profile.d/agent-app.sh` 에 `AGENT_*` 환경 변수를 시스템 전역으로 등록하고, `agent_api_key_test` 1줄을 담은 키 파일을 `$AGENT_KEY_PATH/secret.key` 에 생성했다.
+
+> **참고**: 제공된 바이너리(`agent-app-linux-x86`)는 `AGENT_KEY_PATH` 를 **디렉토리 경로**로 기대하고 그 안의 `secret.key` 파일을 검증한다. MISSION.md 표(`$AGENT_HOME/api_keys/t_secret.key`) 표기와는 어긋나는데, 실제 바이너리 동작에 맞추어 디렉토리 경로 + `secret.key` 파일명으로 구성했다(부트 시퀀스 `[2/5]`/`[3/5]` 검증 통과 기준).
 
 ### 5.2 수행 명령
 
@@ -288,14 +367,14 @@ sudo tee /etc/profile.d/agent-app.sh >/dev/null <<'EOF'
 export AGENT_HOME="/home/agent-admin/agent-app"
 export AGENT_PORT="15034"
 export AGENT_UPLOAD_DIR="$AGENT_HOME/upload_files"
-export AGENT_KEY_PATH="$AGENT_HOME/api_keys/t_secret.key"
+export AGENT_KEY_PATH="$AGENT_HOME/api_keys"
 export AGENT_LOG_DIR="/var/log/agent-app"
 EOF
 sudo chmod 644 /etc/profile.d/agent-app.sh
 
 sudo -u agent-admin bash -lc '
-    printf "agent_api_key_test\n" > "$AGENT_KEY_PATH"
-    chmod 640 "$AGENT_KEY_PATH"
+    printf "agent_api_key_test\n" > "$AGENT_KEY_PATH/secret.key"
+    chmod 640 "$AGENT_KEY_PATH/secret.key"
 '
 ```
 
@@ -311,26 +390,37 @@ sudo -iu agent-admin env | grep '^AGENT_'
 AGENT_HOME=/home/agent-admin/agent-app
 AGENT_PORT=15034
 AGENT_UPLOAD_DIR=/home/agent-admin/agent-app/upload_files
-AGENT_KEY_PATH=/home/agent-admin/agent-app/api_keys/t_secret.key
+AGENT_KEY_PATH=/home/agent-admin/agent-app/api_keys
 AGENT_LOG_DIR=/var/log/agent-app
 ```
 
 ```bash
-sudo -u agent-admin cat /home/agent-admin/agent-app/api_keys/t_secret.key
-ls -l /home/agent-admin/agent-app/api_keys/t_secret.key
+sudo -u agent-admin cat /home/agent-admin/agent-app/api_keys/secret.key
+sudo ls -l /home/agent-admin/agent-app/api_keys/secret.key
 ```
 
 기대 출력:
 
 ```text
 agent_api_key_test
--rw-r----- 1 agent-admin agent-core ... t_secret.key
+-rw-r----- 1 agent-admin agent-core ... secret.key
 ```
 
 ### 5.4 실제 실행 결과
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo -iu agent-admin env | grep '^AGENT_'
+AGENT_UPLOAD_DIR=/home/agent-admin/agent-app/upload_files
+AGENT_PORT=15034
+AGENT_KEY_PATH=/home/agent-admin/agent-app/api_keys
+AGENT_HOME=/home/agent-admin/agent-app
+AGENT_LOG_DIR=/var/log/agent-app
+
+$ sudo -u agent-admin cat /home/agent-admin/agent-app/api_keys/secret.key
+agent_api_key_test
+
+$ sudo ls -l /home/agent-admin/agent-app/api_keys/secret.key
+-rw-r-----+ 1 agent-admin agent-core 19 May 28 02:48 /home/agent-admin/agent-app/api_keys/secret.key
 ```
 
 ---
@@ -388,13 +478,31 @@ tcp   LISTEN 0     ...     0.0.0.0:15034     0.0.0.0:*     users:(("agent_app",p
 **Boot Sequence 콘솔 출력**
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo -iu agent-admin -- bash -lc '"$AGENT_HOME/agent_app"'
+>>> Starting Agent Boot Sequence...
+[1/5] Checking User Account               [OK]
+   ... Running as service user 'agent-admin' (uid=1001)
+[2/5] Verifying Environment Variables     [OK]
+   ... All required Envs correct
+[3/5] Checking Required Files             [OK]
+   ... Verified 'secret.key' with correct key string.
+[4/5] Checking Port Availability          [OK]
+   ... Port 15034 is available.
+[5/5] Verifying Log Permission            [OK]
+   ... Log directory is writable: /var/log/agent-app
+------------------------------------------------------------
+All Boot Checks Passed!
+Agent READY
+2026-05-28 02:50:06,353 [INFO] [SafetyGuard] Process priority lowered (nice=10).
+2026-05-28 02:50:06,353 [INFO] Agent listening at port 15034
+2026-05-28 02:50:06,353 [INFO] === Agent Worker Started ===
 ```
 
 **포트 LISTEN 확인**
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo ss -tulnp | grep ':15034'
+tcp   LISTEN 0      1               0.0.0.0:15034      0.0.0.0:*    users:(("agent_app",pid=8523,fd=4))
 ```
 
 ---
@@ -469,13 +577,28 @@ ls -l /home/agent-admin/agent-app/bin/monitor.sh
 **`monitor.sh` 콘솔 출력**
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo -u agent-admin /home/agent-admin/agent-app/bin/monitor.sh
+====== SYSTEM MONITOR RESULT ======
+
+[HEALTH CHECK]
+Checking process 'agent_app'... [OK] (PID: 8495)
+Checking port 15034... [OK]
+
+[RESOURCE MONITORING]
+CPU Usage : 2.2%
+MEM Usage : 35.7%
+DISK Used : 22%
+
+[WARNING] MEM threshold exceeded (35.7% > 10%)
+
+[INFO] Log appended: /var/log/agent-app/monitor.log
 ```
 
 **파일 권한 확인**
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo ls -l /home/agent-admin/agent-app/bin/monitor.sh
+-rwxr-x--- 1 agent-dev agent-core 5583 May 28 02:52 /home/agent-admin/agent-app/bin/monitor.sh
 ```
 
 ---
@@ -510,7 +633,10 @@ tail -n 5 /var/log/agent-app/monitor.log
 ### 8.3 실제 실행 결과
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo tail -n 5 /var/log/agent-app/monitor.log
+[2026-05-28 02:53:08] PID:8495 CPU:3.2% MEM:36.4% DISK_USED:22%
+[2026-05-28 02:53:11] PID:8495 CPU:2.7% MEM:36.5% DISK_USED:22%
+[2026-05-28 02:53:17] PID:8495 CPU:2.2% MEM:35.7% DISK_USED:22%
 ```
 
 ---
@@ -579,21 +705,46 @@ tail -n 20 /tmp/monitor.cron.log
 **crontab 등록 라인**
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo -u agent-admin crontab -l
+* * * * * /home/agent-admin/agent-app/bin/monitor.sh >> /tmp/monitor.cron.log 2>&1
 ```
 
 **등록 직후 → 1~2분 후 로그 라인 증가**
 
 ```text
-# (등록 직후) wc -l 출력
-# (1~2분 후) wc -l 출력
-# (1~2분 후) tail -n 3 출력
+# (등록 직후 02:53:55 UTC) baseline
+$ sudo wc -l /var/log/agent-app/monitor.log
+3 /var/log/agent-app/monitor.log
+
+# (약 70초 대기 후 02:54:35 UTC) 라인 수 증가
+$ sudo wc -l /var/log/agent-app/monitor.log
+4 /var/log/agent-app/monitor.log
+
+# (1~2분 후) 최근 3 라인 — 마지막 줄(02:54:02)이 cron 자동 실행 결과
+$ sudo tail -n 3 /var/log/agent-app/monitor.log
+[2026-05-28 02:53:11] PID:8495 CPU:2.7% MEM:36.5% DISK_USED:22%
+[2026-05-28 02:53:17] PID:8495 CPU:2.2% MEM:35.7% DISK_USED:22%
+[2026-05-28 02:54:02] PID:8495 CPU:2.2% MEM:35.8% DISK_USED:22%
 ```
 
 **`/tmp/monitor.cron.log` 누적**
 
 ```text
-# 실행 후 결과를 여기에 붙여넣으세요
+$ sudo tail -n 20 /tmp/monitor.cron.log
+====== SYSTEM MONITOR RESULT ======
+
+[HEALTH CHECK]
+Checking process 'agent_app'... [OK] (PID: 8495)
+Checking port 15034... [OK]
+
+[RESOURCE MONITORING]
+CPU Usage : 2.2%
+MEM Usage : 35.8%
+DISK Used : 22%
+
+[WARNING] MEM threshold exceeded (35.8% > 10%)
+
+[INFO] Log appended: /var/log/agent-app/monitor.log
 ```
 
 ---
@@ -602,13 +753,13 @@ tail -n 20 /tmp/monitor.cron.log
 
 [MISSION.md §2.1](MISSION.md) 의 8개 필수 증거 자료 체크리스트. 각 항목은 본 문서의 해당 §에서 명령·기대 출력·실제 결과를 함께 확인할 수 있다.
 
-- [ ] SSH 포트 변경(`20022`) 및 Root 원격 접속 차단 설정 확인 내역 — [§1](#1-ssh-보안-설정--체크리스트-)
-- [ ] 방화벽(UFW 또는 firewalld) 활성화 및 `20022/tcp`, `15034/tcp`만 허용 내역 — [§2](#2-방화벽-설정--체크리스트-)
-- [ ] 계정/그룹(`agent-admin`/`dev`/`test`, `agent-common`/`core`) 생성 확인 내역 — [§3](#3-계정--그룹-생성--체크리스트-)
-- [ ] 디렉토리 구조 및 권한(ACL 포함) 확인 내역 — [§4](#4-디렉토리-구조-및-권한-acl-포함--체크리스트-)
-- [ ] 앱 Boot Sequence 5단계 `[OK]` 및 "Agent READY" 확인 내역 — [§6](#6-앱-boot-sequence--체크리스트-)
-- [ ] `monitor.sh` 실행 결과(프로세스/포트/리소스/경고) 내역 — [§7](#7-monitorsh-실행-결과--체크리스트-)
-- [ ] `/var/log/agent-app/monitor.log` 누적 기록 확인(최근 라인) 내역 — [§8](#8-monitorlog-누적-기록--체크리스트-)
-- [ ] crontab 매분 실행 등록 및 자동 실행 확인(1분 후 로그 증가) 내역 — [§9](#9-crontab-매분-실행--체크리스트-)
+- [x] SSH 포트 변경(`20022`) 및 Root 원격 접속 차단 설정 확인 내역 — [§1](#1-ssh-보안-설정--체크리스트-)
+- [x] 방화벽(UFW 또는 firewalld) 활성화 및 `20022/tcp`, `15034/tcp`만 허용 내역 — [§2](#2-방화벽-설정--체크리스트-)
+- [x] 계정/그룹(`agent-admin`/`dev`/`test`, `agent-common`/`core`) 생성 확인 내역 — [§3](#3-계정--그룹-생성--체크리스트-)
+- [x] 디렉토리 구조 및 권한(ACL 포함) 확인 내역 — [§4](#4-디렉토리-구조-및-권한-acl-포함--체크리스트-)
+- [x] 앱 Boot Sequence 5단계 `[OK]` 및 "Agent READY" 확인 내역 — [§6](#6-앱-boot-sequence--체크리스트-)
+- [x] `monitor.sh` 실행 결과(프로세스/포트/리소스/경고) 내역 — [§7](#7-monitorsh-실행-결과--체크리스트-)
+- [x] `/var/log/agent-app/monitor.log` 누적 기록 확인(최근 라인) 내역 — [§8](#8-monitorlog-누적-기록--체크리스트-)
+- [x] crontab 매분 실행 등록 및 자동 실행 확인(1분 후 로그 증가) 내역 — [§9](#9-crontab-매분-실행--체크리스트-)
 
 모든 항목의 "실제 실행 결과" 블록이 채워지고 위 8개 체크박스가 모두 `[x]` 가 되면 [MISSION.md](MISSION.md) §2.1 산출물 ①(요구사항 수행 내역서)이 완성된다. 두 번째 산출물 ②(`monitor.sh`)는 [scripts/monitor.sh](../scripts/monitor.sh) 를 그대로 제출한다.
